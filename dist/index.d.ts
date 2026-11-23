@@ -33,6 +33,7 @@ interface InstallResult {
     target: SupportedIDE;
     filePath: string;
     action: "created" | "overwritten" | "backed_up_and_created" | "skipped";
+    backupPath?: string;
 }
 declare function installTarget(target: SupportedIDE, options?: InstallOptions): InstallResult;
 

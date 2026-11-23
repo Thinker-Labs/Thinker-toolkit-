@@ -1,84 +1,90 @@
 # Thinker Toolkit
 
-> **Protocol-driven engineering skills runtime for AI-assisted development.**  
-> Official Website: [thinkerlab.tech](https://thinkerlab.tech)
+Engineering instructions for AI-assisted development, with an explicit TypeScript/npm verification command. Thinker writes project files. It does not install an editor extension, enforce model behavior, create agents or manage worktrees.
 
-Thinker Toolkit injects battle-tested engineering disciplines directly into your everyday AI coding assistants (Claude Code, Cursor, VS Code, Windsurf, Google Antigravity).
+## Install and try
 
-No proprietary editor lock-in, no synthetic guesswork — only verified, reproducible engineering.
+Requires Node.js 18+ for the CLI. Development/tests require Node.js 20+.
 
----
-
-## Quick Start
-
-### Option 1: Run instantly with npx (Direct from GitHub)
-```bash
+```sh
+# Run inside the project you want to configure
 npx github:Thinker-Toolkit/Thinker-toolkit- init
-```
 
-### Option 2: Install globally
-```bash
+# Or install the CLI globally from GitHub
 npm install -g github:Thinker-Toolkit/Thinker-toolkit-
 thinker init
 ```
 
-### Option 3: Via NPM registry (once published)
-```bash
-npx thinker-toolkit init
-```
+GitHub installs follow that branch's current source. Pin a reviewed commit when you need reproducible installation. This repository update is not an npm registry release.
 
----
+Run setup in a trusted project. Installation and npm tools can access the network. Review the generated diff and backups before accepting changes.
 
 ## Commands
 
-### `thinker init`
-Interactive workspace setup. Detects your project framework (Next.js, Vite, Python, etc.) and connected IDE configurations, then safely injects the relevant protocols.
-```bash
-thinker init
+| Command | Behavior |
+| --- | --- |
+| `thinker init` | Detect existing editor configurations; ask for targets only when none is detected. |
+| `thinker init --yes` | Skip selection; use detected targets, or Cursor and Claude when none is detected. |
+| `thinker integrate --target claude` | Configure one target. Other targets: cursor, vscode, windsurf, antigravity. |
+| `thinker integrate --target claude --overwrite` | Explicitly replace the entire target, still keeping a versioned backup. |
+| `thinker list` | Print the four bundled protocol descriptions. |
+| `thinker verify` | Run the two required checks below, then informational Git status. Failure returns a nonzero process exit. |
+| `thinker verify --strict` | Same required-failure behavior as the default. Kept for compatibility. |
+| `thinker verify --lenient` | Report failures but permit exit code zero. Do not use as a required CI gate. |
+
+## Files and safe updates
+
+| Target | File |
+| --- | --- |
+| claude | `CLAUDE.md` |
+| cursor | `.cursorrules` |
+| windsurf | `.windsurfrules` |
+| antigravity | `.gemini/rules/thinker.md` |
+| vscode | `.vscode/settings.json` |
+
+Markdown setup manages a block between `<!-- thinker-toolkit:start -->` and `<!-- thinker-toolkit:end -->`. Existing content outside it is preserved. Repeating setup with no changes is a no-op. Existing pre-marker rule files are preserved and get a managed block appended; review duplicate older Thinker instructions manually before removing any.
+
+Existing strict-JSON VS Code settings retain unrelated preferences, including format-on-save and TypeScript SDK choices. Only `thinker.*` keys are updated. Those keys are metadata, not executable instructions or an installed extension. New VS Code files include the template's default editor settings. Existing JSONC/comments are refused without changing the file. Merge manually or use explicit `--overwrite` only after reviewing the replacement.
+
+Every changed existing file gets a new backup: `.bak`, `.bak.1`, `.bak.2`, and so on. Previous backups are never overwritten. Setup writes through a same-directory temporary file and rename, and refuses symlink targets/ancestors. This protects against accidental path following, not against another hostile process racing filesystem changes. A multi-target run is not a transaction: successes remain if another target fails, and the process reports incomplete setup with exit code 1.
+
+There is no uninstall/restore command. Restore the version you intend from Git or a reviewed backup. Do not blindly delete generated files containing your own edits. Global package removal does not undo files written to projects.
+
+## What verify checks
+
+1. `npx --no-install tsc --noEmit`, with output visible. It does not fetch a missing TypeScript compiler.
+2. `npm test -- --run`, with output visible. Your project must provide a compatible test script.
+3. `git status --porcelain`, informational only. A dirty tree or unavailable Git is not a required-check failure.
+
+A failed or timed-out types/test command returns exit code 1 unless `--lenient` was explicitly selected. Each check has a two-minute timeout. Passing these commands is not a safe-shipping guarantee. Lint, build, other languages and package managers, coverage policy and CI branch protection remain your project's responsibility. Framework detection during setup does not change the verification commands. Commands run project code with your current permissions, so do not verify untrusted projects blindly.
+
+## Protocols
+
+- Systematic debugging: hypothesis, reproduction, root-cause evidence and regression coverage.
+- Test-driven development: observe a focused failing test, implement, rerun, then refactor.
+- Verification before completion: gather actual check output before claiming completion.
+- Worktree isolation: separate independent tasks using ordinary Git worktrees and review merges.
+
+These are instructions. They cannot guarantee compliance, prevent conflicts or supply a security sandbox. Native editor support for legacy rule-file formats can change; check your editor version.
+
+## Development and checks
+
+```sh
+npm ci
+npm run typecheck
+npm test
+npm run build
+npm run smoke
+npm audit
 ```
-Pass `-y` / `--yes` to accept sensible defaults non-interactively:
-```bash
-thinker init --yes
-```
 
-### `thinker integrate --target <ide>`
-Inject protocols directly into a specific environment:
-```bash
-thinker integrate --target cursor
-thinker integrate --target claude
-thinker integrate --target vscode
-thinker integrate --target windsurf
-thinker integrate --target antigravity
-```
+Tests use isolated temporary directories. The smoke check packs locally, installs the artifact into a temporary consumer, checks CJS/ESM entrypoints and CLI setup/repeat setup. It does not publish. CI runs on Linux, macOS and Windows with Node.js 20/22. Development dependency upgrades are pinned by the lockfile.
 
-### `thinker list`
-List all bundled skills and invariant protocols:
-```bash
-thinker list
-```
+## v0.2 compatibility notes
 
-### `thinker verify`
-Run pre-flight invariant checks, TypeScript verification, regression test barriers, and git status check before shipping:
-```bash
-thinker verify
-thinker verify --strict
-```
+- Verification failures now fail by default. Use `--lenient` only when a zero exit despite failures is intentional.
+- Setup preserves unmanaged Markdown and existing editor preferences instead of replacing whole files by default.
+- `--overwrite` still opts into full replacement, but now also keeps a unique backup.
+- Package CJS/ESM entrypoints now resolve to the built artifacts.
 
----
-
-## Bundled Protocols
-
-1. **Systematic Debugging**: Rigorous 4-step root cause analysis (Hypothesis -> Trace Isolation -> Reproduction Verification -> Regression Barrier) before touching code.
-2. **Test-Driven Development (TDD)**: Enforces writing failing unit/integration tests before writing implementation code.
-3. **Verification Before Completion**: Automated pre-flight checks (lint, types, tests, builds) before claiming any task is resolved.
-4. **Subagent Worktree Isolation**: Orchestrates parallel subagents in independent Git worktrees to prevent state collisions.
-
----
-
-## Safety First
-Thinker Toolkit never truncates or destroys existing developer configurations. If `.cursorrules` or `CLAUDE.md` already exists, an automatic `.bak` backup is created before applying updates.
-
----
-
-## License
-MIT (c) Thinker Labs (https://thinkerlab.tech)
+MIT. See package metadata for project ownership.

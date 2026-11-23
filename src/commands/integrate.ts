@@ -19,7 +19,8 @@ export async function integrateCommand(
     const res = installTarget(lower, { overwrite: options.overwrite });
     logger.success(`\n  ✓ Thinker protocol integrated for ${pc.cyan(lower)}`);
     logger.dim(`    File: ${res.filePath}`);
-    logger.dim(`    Status: ${res.action}\n`);
+    logger.dim(`    Status: ${res.action}`);
+    if (res.backupPath) logger.dim(`    Backup: ${res.backupPath}`);
   } catch (err: any) {
     logger.error(`\n  ✗ Integration failed: ${err.message}\n`);
     process.exit(1);

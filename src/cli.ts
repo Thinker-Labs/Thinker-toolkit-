@@ -10,7 +10,7 @@ export function createProgram(): Command {
   program
     .name("thinker")
     .description("Protocol-driven engineering skills runtime for AI-assisted development")
-    .version("0.1.0");
+    .version("0.2.0");
 
   program
     .command("init")
@@ -24,7 +24,7 @@ export function createProgram(): Command {
     .command("integrate")
     .description("Integrate Thinker protocols directly into an IDE target")
     .requiredOption("-t, --target <ide>", "Target IDE: cursor, claude, vscode, windsurf, antigravity")
-    .option("-o, --overwrite", "Overwrite existing configuration instead of backing up")
+    .option("-o, --overwrite", "Explicitly replace the whole target file (keeps a versioned backup)")
     .action(async (options) => {
       await integrateCommand(options.target, options);
     });
@@ -39,7 +39,8 @@ export function createProgram(): Command {
   program
     .command("verify")
     .description("Run invariant checks, type-checking, and regression barriers")
-    .option("--strict", "Enforce strict zero-failure mode")
+    .option("--strict", "Fail when types or tests fail (the default)")
+    .option("--lenient", "Report failures but allow exit code zero")
     .action((options) => {
       verifyCommand(options);
     });

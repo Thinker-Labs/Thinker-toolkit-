@@ -40,18 +40,23 @@ export async function initCommand(options: { yes?: boolean } = {}) {
     return;
   }
 
+  let failures = 0;
   for (const ide of selectedIDEs) {
     try {
       const res = installTarget(ide, { cwd: workspace.cwd });
       if (res.action === "backed_up_and_created") {
-        logger.info(`  ✓ Configured ${pc.cyan(ide)} (backed up existing to .bak)`);
+        logger.info(`  ✓ Configured ${pc.cyan(ide)} (backup: ${res.backupPath})`);
       } else {
         logger.success(`  ✓ Configured ${pc.cyan(ide)} -> ${res.filePath}`);
       }
     } catch (err: any) {
+      failures++;
       logger.error(`  ✗ Failed to configure ${ide}: ${err.message}`);
     }
   }
 
-  logger.info(pc.green("\n  Thinker skills successfully injected. Ready for deliberate engineering.\n"));
+  if (failures) {
+    logger.error(`\nSetup incomplete: ${failures} target(s) failed. Review the errors above.\n`);
+    process.exitCode = 1;
+  } else logger.success("\nSetup complete. Review the generated files and backups before using them.\n");
 }

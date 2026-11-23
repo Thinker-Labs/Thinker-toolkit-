@@ -1,11 +1,11 @@
 {
   "name": "thinker-toolkit",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Protocol-driven engineering skills runtime for AI-assisted development",
   "author": "Thinker Labs",
   "license": "MIT",
-  "main": "./dist/index.cjs",
-  "module": "./dist/index.js",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
   "bin": {
     "thinker": "bin/thinker.js",
@@ -21,7 +21,8 @@
     "prepare": "tsup",
     "dev": "tsup --watch",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "smoke": "node scripts/smoke.mjs"
   },
   "dependencies": {
     "commander": "^13.1.0",
@@ -33,9 +34,25 @@
     "@types/prompts": "^2.4.9",
     "tsup": "^8.4.0",
     "typescript": "^5.8.2",
-    "vitest": "^3.0.7"
+    "vitest": "^4.1.12"
   },
   "engines": {
     "node": ">=18"
+  },
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.mts",
+        "default": "./dist/index.mjs"
+      },
+      "require": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      }
+    }
+  },
+  "overrides": {
+    "esbuild": "^0.28.1",
+    "tinypool": "^2.1.2"
   }
 }

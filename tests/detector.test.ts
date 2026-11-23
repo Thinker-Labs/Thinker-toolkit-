@@ -1,19 +1,12 @@
 import { describe, it, expect } from "vitest";
-import { detectWorkspace } from "../src/core/detector";
+import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
-
-describe("Workspace Detector", () => {
-  it("should detect framework and git in a Next.js directory", () => {
-    // Current landing directory is a Next.js project
-    const landingPath = path.resolve(__dirname, "../../thinker-landing");
-    const context = detectWorkspace(landingPath);
-    expect(context.framework).toBe("next");
-    expect(context.hasGit).toBe(true);
-    expect(context.packageManager).toBe("npm");
-  });
-
-  it("should detect IDE signatures when configuration folders exist", () => {
-    const context = detectWorkspace(process.cwd());
-    expect(Array.isArray(context.detectedIDEs)).toBe(true);
-  });
+import { detectWorkspace } from "../src/core/detector";
+describe("Workspace detector", () => {
+ it("detects a self-contained Next project and package manager", () => {
+  const cwd=fs.mkdtempSync(path.join(os.tmpdir(),"thinker-detect-"));
+  try { fs.writeFileSync(path.join(cwd,"package.json"),JSON.stringify({dependencies:{next:"*"}}));fs.writeFileSync(path.join(cwd,"pnpm-lock.yaml"),"");fs.mkdirSync(path.join(cwd,".git"));fs.mkdirSync(path.join(cwd,".cursor"));const c=detectWorkspace(cwd);expect(c.framework).toBe("next");expect(c.hasGit).toBe(true);expect(c.packageManager).toBe("pnpm");expect(c.detectedIDEs).toContain("cursor"); }
+  finally {fs.rmSync(cwd,{recursive:true,force:true});}
+ });
 });

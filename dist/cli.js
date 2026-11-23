@@ -104,6 +104,7 @@ function detectWorkspace(targetDir = process.cwd()) {
 // src/core/installer.ts
 var import_node_fs2 = __toESM(require("fs"));
 var import_node_path2 = __toESM(require("path"));
+var import_node_crypto = require("crypto");
 
 // src/core/registry.ts
 var CORE_SKILLS = [
@@ -216,56 +217,92 @@ ${rules}
 }
 
 // src/core/installer.ts
+var START = "<!-- thinker-toolkit:start -->";
+var END = "<!-- thinker-toolkit:end -->";
+function assertSafePath(cwd, fullPath) {
+  let part = cwd;
+  const entries = [cwd, ...import_node_path2.default.relative(cwd, fullPath).split(import_node_path2.default.sep).map((segment) => part = import_node_path2.default.join(part, segment))];
+  for (const entry of entries) {
+    let stat;
+    try {
+      stat = import_node_fs2.default.lstatSync(entry);
+    } catch (error) {
+      if (error.code === "ENOENT") continue;
+      throw error;
+    }
+    if (stat.isSymbolicLink()) throw new Error(`Refusing symlink path: ${entry}`);
+  }
+  if (!fullPath.startsWith(cwd + import_node_path2.default.sep)) throw new Error("Target must be inside the workspace");
+}
+function mergeRules(existing, content) {
+  const block = `${START}
+${content.trimEnd()}
+${END}`;
+  const starts = existing.split(START).length - 1;
+  const ends = existing.split(END).length - 1;
+  if (!starts && !ends) return existing ? `${existing}${existing.endsWith("\n") ? "" : "\n"}
+${block}
+` : `${block}
+`;
+  const begin = existing.indexOf(START), end = existing.indexOf(END);
+  if (starts !== 1 || ends !== 1 || end < begin) throw new Error("Ambiguous Thinker markers. Review the file before setup; it was not changed.");
+  return existing.slice(0, begin) + block + existing.slice(end + END.length);
+}
+function mergeSettings(existing, content) {
+  let parsed;
+  try {
+    parsed = JSON.parse(existing);
+  } catch {
+    throw new Error("Existing VS Code settings are not strict JSON (possibly JSONC). No change made. Merge settings manually or use --overwrite explicitly.");
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("VS Code settings must be a JSON object. No change made.");
+  const current = parsed;
+  const generated = JSON.parse(content);
+  for (const [key, value] of Object.entries(generated)) if (key.startsWith("thinker.")) current[key] = value;
+  return JSON.stringify(current, null, 2) + "\n";
+}
 function installTarget(target, options = {}) {
   const cwd = import_node_path2.default.resolve(options.cwd || process.cwd());
   const skills = options.skills || CORE_SKILLS;
-  let relativePath = "";
-  let content = "";
-  switch (target) {
-    case "cursor":
-      relativePath = ".cursorrules";
-      content = renderCursorRules(skills);
-      break;
-    case "claude":
-      relativePath = "CLAUDE.md";
-      content = renderClaudeRules(skills);
-      break;
-    case "windsurf":
-      relativePath = ".windsurfrules";
-      content = renderWindsurfRules(skills);
-      break;
-    case "vscode":
-      relativePath = import_node_path2.default.join(".vscode", "settings.json");
-      content = renderVSCodeSettings(skills);
-      break;
-    case "antigravity":
-      relativePath = import_node_path2.default.join(".gemini", "rules", "thinker.md");
-      content = renderAntigravityRules(skills);
-      break;
-    default:
-      throw new Error(`Unsupported IDE target: ${target}`);
-  }
+  const templates = {
+    cursor: [".cursorrules", renderCursorRules],
+    claude: ["CLAUDE.md", renderClaudeRules],
+    windsurf: [".windsurfrules", renderWindsurfRules],
+    vscode: [import_node_path2.default.join(".vscode", "settings.json"), renderVSCodeSettings],
+    antigravity: [import_node_path2.default.join(".gemini", "rules", "thinker.md"), renderAntigravityRules]
+  };
+  if (!(target in templates)) throw new Error(`Unsupported IDE target: ${target}`);
+  const [relativePath, render] = templates[target];
   const fullPath = import_node_path2.default.join(cwd, relativePath);
-  const dir = import_node_path2.default.dirname(fullPath);
-  if (!import_node_fs2.default.existsSync(dir)) {
-    import_node_fs2.default.mkdirSync(dir, { recursive: true });
-  }
-  let action = "created";
-  if (import_node_fs2.default.existsSync(fullPath)) {
-    if (options.overwrite) {
-      action = "overwritten";
-    } else {
-      const backupPath = `${fullPath}.bak`;
-      import_node_fs2.default.copyFileSync(fullPath, backupPath);
-      action = "backed_up_and_created";
+  assertSafePath(cwd, fullPath);
+  const exists = import_node_fs2.default.existsSync(fullPath);
+  if (exists && !import_node_fs2.default.statSync(fullPath).isFile()) throw new Error(`Target is not a regular file: ${fullPath}`);
+  const existing = exists ? import_node_fs2.default.readFileSync(fullPath, "utf8") : "";
+  const generated = render(skills);
+  const content = options.overwrite ? generated : target === "vscode" ? exists ? mergeSettings(existing, generated) : generated + "\n" : mergeRules(existing, generated);
+  if (exists && content === existing) return { target, filePath: fullPath, action: "skipped" };
+  import_node_fs2.default.mkdirSync(import_node_path2.default.dirname(fullPath), { recursive: true });
+  let backupPath;
+  if (exists) {
+    for (let i = 0; ; i++) {
+      const candidate = `${fullPath}.bak${i ? `.${i}` : ""}`;
+      try {
+        import_node_fs2.default.copyFileSync(fullPath, candidate, import_node_fs2.default.constants.COPYFILE_EXCL);
+        backupPath = candidate;
+        break;
+      } catch (error) {
+        if (error.code !== "EEXIST") throw error;
+      }
     }
   }
-  import_node_fs2.default.writeFileSync(fullPath, content, "utf-8");
-  return {
-    target,
-    filePath: fullPath,
-    action
-  };
+  const temp = import_node_path2.default.join(import_node_path2.default.dirname(fullPath), `.thinker-${(0, import_node_crypto.randomUUID)()}.tmp`);
+  try {
+    import_node_fs2.default.writeFileSync(temp, content, { flag: "wx", mode: exists ? import_node_fs2.default.statSync(fullPath).mode & 511 : 384 });
+    import_node_fs2.default.renameSync(temp, fullPath);
+  } finally {
+    if (import_node_fs2.default.existsSync(temp)) import_node_fs2.default.unlinkSync(temp);
+  }
+  return { target, filePath: fullPath, action: exists ? options.overwrite ? "overwritten" : "backed_up_and_created" : "created", backupPath };
 }
 
 // src/utils/logger.ts
@@ -310,19 +347,26 @@ async function initCommand(options = {}) {
     logger.warn("  No IDE targets selected. Exiting.");
     return;
   }
+  let failures = 0;
   for (const ide of selectedIDEs) {
     try {
       const res = installTarget(ide, { cwd: workspace.cwd });
       if (res.action === "backed_up_and_created") {
-        logger.info(`  \u2713 Configured ${import_picocolors2.default.cyan(ide)} (backed up existing to .bak)`);
+        logger.info(`  \u2713 Configured ${import_picocolors2.default.cyan(ide)} (backup: ${res.backupPath})`);
       } else {
         logger.success(`  \u2713 Configured ${import_picocolors2.default.cyan(ide)} -> ${res.filePath}`);
       }
     } catch (err) {
+      failures++;
       logger.error(`  \u2717 Failed to configure ${ide}: ${err.message}`);
     }
   }
-  logger.info(import_picocolors2.default.green("\n  Thinker skills successfully injected. Ready for deliberate engineering.\n"));
+  if (failures) {
+    logger.error(`
+Setup incomplete: ${failures} target(s) failed. Review the errors above.
+`);
+    process.exitCode = 1;
+  } else logger.success("\nSetup complete. Review the generated files and backups before using them.\n");
 }
 
 // src/commands/integrate.ts
@@ -341,8 +385,8 @@ async function integrateCommand(target, options = {}) {
     logger.success(`
   \u2713 Thinker protocol integrated for ${import_picocolors3.default.cyan(lower)}`);
     logger.dim(`    File: ${res.filePath}`);
-    logger.dim(`    Status: ${res.action}
-`);
+    logger.dim(`    Status: ${res.action}`);
+    if (res.backupPath) logger.dim(`    Backup: ${res.backupPath}`);
   } catch (err) {
     logger.error(`
   \u2717 Integration failed: ${err.message}
@@ -365,59 +409,47 @@ function listCommand() {
 
 // src/commands/verify.ts
 var import_node_child_process = require("child_process");
-var import_picocolors5 = __toESM(require("picocolors"));
 function verifyCommand(options = {}) {
-  logger.info(import_picocolors5.default.bold("\n  Thinker Toolkit \u2014 Invariant & Regression Verification\n"));
-  let failed = false;
-  try {
-    logger.dim("  [1/3] Verifying TypeScript invariants (tsc --noEmit)...");
-    (0, import_node_child_process.execSync)("npx tsc --noEmit", { stdio: "ignore" });
-    logger.success("    \u2713 TypeScript type-check passed without errors.");
-  } catch {
-    logger.error("    \u2717 TypeScript verification failed.");
-    failed = true;
+  if (options.strict && options.lenient) throw new Error("Choose --strict or --lenient, not both.");
+  const timeout = options.timeout ?? 12e4;
+  if (!Number.isSafeInteger(timeout) || timeout <= 0) throw new Error("Timeout must be a positive integer in milliseconds.");
+  logger.info("\nThinker verification: project commands run with your current permissions.\n");
+  const results = [];
+  for (const [name, command] of [["TypeScript", "npx --no-install tsc --noEmit"], ["Tests", "npm test -- --run"]]) {
+    logger.info(`Running ${command}`);
+    const result = (0, import_node_child_process.spawnSync)(command, { shell: true, stdio: "inherit", timeout });
+    const passed = result.status === 0 && !result.error;
+    const detail2 = result.error?.message || (result.signal ? `Terminated: ${result.signal}` : void 0);
+    results.push({ name, status: passed ? "passed" : "failed", exitCode: result.status, detail: detail2 });
+    (passed ? logger.success : logger.error)(`${name}: ${passed ? "passed" : "failed"}${detail2 ? ` (${detail2})` : ""}`);
   }
-  try {
-    logger.dim("  [2/3] Verifying regression test suite...");
-    (0, import_node_child_process.execSync)("npm test -- --run", { stdio: "ignore" });
-    logger.success("    \u2713 All automated unit & integration tests passed.");
-  } catch {
-    logger.warn("    ! Automated test suite returned non-zero exit code or not configured.");
-    if (options.strict) failed = true;
-  }
-  try {
-    logger.dim("  [3/3] Checking working directory cleanliness...");
-    const status = (0, import_node_child_process.execSync)("git status --porcelain", { encoding: "utf-8" }).trim();
-    if (status.length === 0) {
-      logger.success("    \u2713 Git working tree is clean.");
-    } else {
-      logger.dim(`    ! Working tree has uncommitted changes (${status.split("\n").length} files).`);
-    }
-  } catch {
-    logger.dim("    ! Git check skipped (not a git repository).");
-  }
-  if (failed && options.strict) {
-    logger.error(import_picocolors5.default.red("\n  Verification barrier FAILED in strict mode. Exiting.\n"));
-    process.exit(1);
-  } else {
-    logger.info(import_picocolors5.default.green("\n  Invariant verification complete. Ready for safe shipping.\n"));
-  }
+  const git = (0, import_node_child_process.spawnSync)("git", ["status", "--porcelain"], { encoding: "utf8", timeout });
+  const detail = git.status !== 0 || git.error ? "Git status unavailable; not a required check." : git.stdout.trim() ? "Working tree has uncommitted changes." : "Working tree is clean.";
+  results.push({ name: "Git status", status: "informational", exitCode: git.status, detail });
+  logger.info(detail);
+  const failed = results.some((r) => r.status === "failed");
+  if (failed) {
+    logger.error(`
+Verification failed.${options.lenient ? " Lenient mode requested: exit code remains zero." : " Required checks did not pass."}`);
+    if (!options.lenient) process.exitCode = 1;
+  } else logger.success("\nConfigured TypeScript and npm test commands passed. Run lint/build and other project checks separately.");
+  return results;
 }
 
 // src/cli.ts
 function createProgram() {
   const program = new import_commander.Command();
-  program.name("thinker").description("Protocol-driven engineering skills runtime for AI-assisted development").version("0.1.0");
+  program.name("thinker").description("Protocol-driven engineering skills runtime for AI-assisted development").version("0.2.0");
   program.command("init").description("Initialize and configure Thinker skills in your workspace").option("-y, --yes", "Skip interactive prompts and use sensible defaults").action(async (options) => {
     await initCommand(options);
   });
-  program.command("integrate").description("Integrate Thinker protocols directly into an IDE target").requiredOption("-t, --target <ide>", "Target IDE: cursor, claude, vscode, windsurf, antigravity").option("-o, --overwrite", "Overwrite existing configuration instead of backing up").action(async (options) => {
+  program.command("integrate").description("Integrate Thinker protocols directly into an IDE target").requiredOption("-t, --target <ide>", "Target IDE: cursor, claude, vscode, windsurf, antigravity").option("-o, --overwrite", "Explicitly replace the whole target file (keeps a versioned backup)").action(async (options) => {
     await integrateCommand(options.target, options);
   });
   program.command("list").description("List all available invariant protocols and skills").action(() => {
     listCommand();
   });
-  program.command("verify").description("Run invariant checks, type-checking, and regression barriers").option("--strict", "Enforce strict zero-failure mode").action((options) => {
+  program.command("verify").description("Run invariant checks, type-checking, and regression barriers").option("--strict", "Fail when types or tests fail (the default)").option("--lenient", "Report failures but allow exit code zero").action((options) => {
     verifyCommand(options);
   });
   return program;

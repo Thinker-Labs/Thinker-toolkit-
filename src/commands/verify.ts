@@ -1,49 +1,30 @@
-import { execSync } from "node:child_process";
-import pc from "picocolors";
+import { spawnSync } from "node:child_process";
 import { logger } from "../utils/logger";
 
-export function verifyCommand(options: { strict?: boolean } = {}) {
-  logger.info(pc.bold("\n  Thinker Toolkit — Invariant & Regression Verification\n"));
-
-  let failed = false;
-
-  // 1. Typecheck
-  try {
-    logger.dim("  [1/3] Verifying TypeScript invariants (tsc --noEmit)...");
-    execSync("npx tsc --noEmit", { stdio: "ignore" });
-    logger.success("    ✓ TypeScript type-check passed without errors.");
-  } catch {
-    logger.error("    ✗ TypeScript verification failed.");
-    failed = true;
+export interface VerifyOptions { strict?: boolean; lenient?: boolean; timeout?: number }
+export interface CheckResult { name: string; status: "passed" | "failed" | "informational"; exitCode: number | null; detail?: string }
+export function verifyCommand(options: VerifyOptions = {}): CheckResult[] {
+  if (options.strict && options.lenient) throw new Error("Choose --strict or --lenient, not both.");
+  const timeout = options.timeout ?? 120_000;
+  if (!Number.isSafeInteger(timeout) || timeout <= 0) throw new Error("Timeout must be a positive integer in milliseconds.");
+  logger.info("\nThinker verification: project commands run with your current permissions.\n");
+  const results: CheckResult[] = [];
+  for (const [name, command] of [["TypeScript", "npx --no-install tsc --noEmit"], ["Tests", "npm test -- --run"]]) {
+    logger.info(`Running ${command}`);
+    const result = spawnSync(command, { shell: true, stdio: "inherit", timeout });
+    const passed = result.status === 0 && !result.error;
+    const detail = result.error?.message || (result.signal ? `Terminated: ${result.signal}` : undefined);
+    results.push({ name, status: passed ? "passed" : "failed", exitCode: result.status, detail });
+    (passed ? logger.success : logger.error)(`${name}: ${passed ? "passed" : "failed"}${detail ? ` (${detail})` : ""}`);
   }
-
-  // 2. Tests
-  try {
-    logger.dim("  [2/3] Verifying regression test suite...");
-    execSync("npm test -- --run", { stdio: "ignore" });
-    logger.success("    ✓ All automated unit & integration tests passed.");
-  } catch {
-    logger.warn("    ! Automated test suite returned non-zero exit code or not configured.");
-    if (options.strict) failed = true;
-  }
-
-  // 3. Git Status
-  try {
-    logger.dim("  [3/3] Checking working directory cleanliness...");
-    const status = execSync("git status --porcelain", { encoding: "utf-8" }).trim();
-    if (status.length === 0) {
-      logger.success("    ✓ Git working tree is clean.");
-    } else {
-      logger.dim(`    ! Working tree has uncommitted changes (${status.split("\n").length} files).`);
-    }
-  } catch {
-    logger.dim("    ! Git check skipped (not a git repository).");
-  }
-
-  if (failed && options.strict) {
-    logger.error(pc.red("\n  Verification barrier FAILED in strict mode. Exiting.\n"));
-    process.exit(1);
-  } else {
-    logger.info(pc.green("\n  Invariant verification complete. Ready for safe shipping.\n"));
-  }
+  const git = spawnSync("git", ["status", "--porcelain"], { encoding: "utf8", timeout });
+  const detail = git.status !== 0 || git.error ? "Git status unavailable; not a required check." : git.stdout.trim() ? "Working tree has uncommitted changes." : "Working tree is clean.";
+  results.push({ name: "Git status", status: "informational", exitCode: git.status, detail });
+  logger.info(detail);
+  const failed = results.some(r => r.status === "failed");
+  if (failed) {
+    logger.error(`\nVerification failed.${options.lenient ? " Lenient mode requested: exit code remains zero." : " Required checks did not pass."}`);
+    if (!options.lenient) process.exitCode = 1;
+  } else logger.success("\nConfigured TypeScript and npm test commands passed. Run lint/build and other project checks separately.");
+  return results;
 }
