@@ -8,6 +8,9 @@ inputs:
 runs:
   using: composite
   steps:
+    - name: Install locked Action runtime dependencies
+      shell: bash
+      run: npm ci --prefix "$GITHUB_ACTION_PATH" --ignore-scripts --omit=dev --no-audit --no-fund
     - name: Run reviewed checks
       shell: bash
       env:
