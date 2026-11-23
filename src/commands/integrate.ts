@@ -7,7 +7,7 @@ export async function integrateCommand(
   target: string,
   options: { yes?: boolean; overwrite?: boolean } = {}
 ) {
-  const validTargets: SupportedIDE[] = ["cursor", "claude", "vscode", "windsurf", "antigravity"];
+  const validTargets: SupportedIDE[] = ["cursor", "claude", "vscode", "windsurf", "antigravity", "agents", "copilot"];
   const lower = target.toLowerCase() as SupportedIDE;
 
   if (!validTargets.includes(lower)) {

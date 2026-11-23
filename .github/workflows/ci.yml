@@ -21,3 +21,11 @@ jobs:
       - run: npm test
       - run: npm run build
       - run: npm run smoke
+      - run: npm run demo
+      - name: Action trust guard (must refuse)
+        shell: bash
+        run: |
+          if node scripts/action.mjs; then
+            echo "Action ran without explicit trust"
+            exit 1
+          fi

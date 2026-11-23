@@ -47,3 +47,7 @@ describe("Repeat-safe setup", () => {
  it("refuses malformed managed markers",()=>{const cwd=fixture();fs.writeFileSync(path.join(cwd,"CLAUDE.md"),"<!-- thinker-toolkit:start -->\ncustom");expect(()=>installTarget("claude",{cwd})).toThrow("Ambiguous");});
  it.skipIf(process.platform==="win32")("refuses symlink targets and parents",()=>{const cwd=fixture(),outside=fixture();fs.writeFileSync(path.join(outside,"secret"),"untouched");fs.symlinkSync(path.join(outside,"secret"),path.join(cwd,"CLAUDE.md"));expect(()=>installTarget("claude",{cwd})).toThrow("symlink");fs.symlinkSync(outside,path.join(cwd,".vscode"));expect(()=>installTarget("vscode",{cwd})).toThrow("symlink");expect(fs.readFileSync(path.join(outside,"secret"),"utf8")).toBe("untouched");});
 });
+
+describe('shared and native instruction adapters',()=>{
+ it.each(['agents','copilot'] as const)('preserves custom content and repeats safely for %s',target=>{const cwd=fs.mkdtempSync(path.join(os.tmpdir(),'thinker-adapter-'));try{const first=installTarget(target,{cwd});fs.appendFileSync(first.filePath,'\nKeep project guidance.\n');expect(installTarget(target,{cwd}).action).toBe('skipped');expect(fs.readFileSync(first.filePath,'utf8')).toContain('Keep project guidance.');}finally{fs.rmSync(cwd,{recursive:true,force:true});}});
+});

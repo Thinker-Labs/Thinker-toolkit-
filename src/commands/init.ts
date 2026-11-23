@@ -20,6 +20,8 @@ export async function initCommand(options: { yes?: boolean } = {}) {
       name: "ides",
       message: "Select IDE targets to configure with Thinker skills:",
       choices: [
+        { title: "Shared instructions (AGENTS.md)", value: "agents" },
+        { title: "GitHub Copilot (.github/copilot-instructions.md)", value: "copilot" },
         { title: "Cursor (.cursorrules)", value: "cursor", selected: true },
         { title: "Claude Code (CLAUDE.md)", value: "claude", selected: true },
         { title: "VS Code (.vscode/settings.json)", value: "vscode" },

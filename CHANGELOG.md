@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased (0.3 development preview)
+
+- Reviewed config-driven checks, local JSON/Markdown receipts and stale detection.
+- Explicit execution trust, argv commands, bounded output and best-effort redaction.
+- Config/command doctor, AGENTS.md and Copilot instruction-file adapters.
+- Composite Action source and reproducible regression/fix/stale demo.
+- No npm release, marketplace listing, telemetry or hosted service.
+
 ## 0.2.1
 
 - Document pinned npm installation and link to the published package.

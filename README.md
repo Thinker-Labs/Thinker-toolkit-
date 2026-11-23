@@ -19,6 +19,10 @@ Published on npm as [thinker-toolkit](https://www.npmjs.com/package/thinker-tool
 
 Run setup in a trusted project. Installation and npm tools can access the network. Review the generated diff and backups before accepting changes.
 
+## Development preview: project checks and receipts
+
+Main now includes unreleased `check`, `receipt` and `doctor` commands plus shared instruction adapters and a composite Action. The npm version is still 0.2.1. See [review receipts](docs/review-receipts.md) and [Action/adapters](docs/action-and-adapters.md). Run `npm run demo` after building for a disposable failure/fix/stale walkthrough. Do not describe this preview as a released 0.3 or a proven team deployment.
+
 ## Commands
 
 | Command | Behavior |

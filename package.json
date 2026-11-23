@@ -1,6 +1,6 @@
 {
   "name": "thinker-toolkit",
-  "version": "0.2.1",
+  "version": "0.3.0-dev.0",
   "description": "Protocol-driven engineering skills runtime for AI-assisted development",
   "author": "Thinker Labs",
   "license": "MIT",
@@ -16,7 +16,9 @@
     "bin",
     "README.md",
     "LICENSE",
-    "CHANGELOG.md"
+    "CHANGELOG.md",
+    "action.yml",
+    "scripts/action.mjs"
   ],
   "scripts": {
     "build": "tsup",
@@ -24,7 +26,8 @@
     "dev": "tsup --watch",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "smoke": "node scripts/smoke.mjs"
+    "smoke": "node scripts/smoke.mjs",
+    "demo": "node scripts/demo.mjs"
   },
   "dependencies": {
     "commander": "^13.1.0",

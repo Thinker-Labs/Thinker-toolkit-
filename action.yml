@@ -1,0 +1,15 @@
+name: Thinker project checks
+description: Run reviewed project commands and write local review receipts. No uploads or PR writes.
+inputs:
+  trust-project-commands:
+    description: Set to true only after reviewing this checkout and thinker.config.json. Commands execute repository code.
+    required: true
+    default: 'false'
+runs:
+  using: composite
+  steps:
+    - name: Run reviewed checks
+      shell: bash
+      env:
+        THINKER_TRUST_PROJECT_COMMANDS: ${{ inputs.trust-project-commands }}
+      run: node "$GITHUB_ACTION_PATH/scripts/action.mjs"

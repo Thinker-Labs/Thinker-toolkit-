@@ -31,12 +31,21 @@ var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: tru
 var index_exports = {};
 __export(index_exports, {
   CORE_SKILLS: () => CORE_SKILLS,
+  checkLatest: () => checkLatest,
   createProgram: () => createProgram,
   detectWorkspace: () => detectWorkspace,
+  executeCheck: () => executeCheck,
+  fingerprint: () => fingerprint,
   getSkill: () => getSkill,
   installTarget: () => installTarget,
   listSkills: () => listSkills,
-  run: () => run
+  loadConfig: () => loadConfig,
+  receiptMarkdown: () => receiptMarkdown,
+  redact: () => redact,
+  run: () => run,
+  runConfigured: () => runConfigured,
+  safePath: () => safePath,
+  saveReceipt: () => saveReceipt
 });
 module.exports = __toCommonJS(index_exports);
 
@@ -77,6 +86,8 @@ function detectWorkspace(targetDir = process.cwd()) {
     framework = "python";
   }
   const detectedIDEs = [];
+  if (import_node_fs.default.existsSync(import_node_path.default.join(cwd, "AGENTS.md"))) detectedIDEs.push("agents");
+  if (import_node_fs.default.existsSync(import_node_path.default.join(cwd, ".github/copilot-instructions.md"))) detectedIDEs.push("copilot");
   if (import_node_fs.default.existsSync(import_node_path.default.join(cwd, ".cursor")) || import_node_fs.default.existsSync(import_node_path.default.join(cwd, ".cursorrules"))) {
     detectedIDEs.push("cursor");
   }
@@ -268,6 +279,8 @@ function installTarget(target, options = {}) {
   const cwd = import_node_path2.default.resolve(options.cwd || process.cwd());
   const skills = options.skills || CORE_SKILLS;
   const templates = {
+    agents: ["AGENTS.md", renderClaudeRules],
+    copilot: [import_node_path2.default.join(".github", "copilot-instructions.md"), renderClaudeRules],
     cursor: [".cursorrules", renderCursorRules],
     claude: ["CLAUDE.md", renderClaudeRules],
     windsurf: [".windsurfrules", renderWindsurfRules],
@@ -308,6 +321,224 @@ function installTarget(target, options = {}) {
   return { target, filePath: fullPath, action: exists ? options.overwrite ? "overwritten" : "backed_up_and_created" : "created", backupPath };
 }
 
+// src/commands/check.ts
+var import_node_fs4 = __toESM(require("fs"));
+var import_node_path4 = __toESM(require("path"));
+var import_node_child_process2 = require("child_process");
+
+// src/core/checks.ts
+var import_node_fs3 = __toESM(require("fs"));
+var import_node_path3 = __toESM(require("path"));
+var import_node_crypto2 = require("crypto");
+var import_node_child_process = require("child_process");
+function safePath(root, relative) {
+  const base = import_node_fs3.default.realpathSync(root), full = import_node_path3.default.resolve(base, relative);
+  if (full !== base && !full.startsWith(base + import_node_path3.default.sep)) throw Error("Path escapes project root");
+  const pieces = import_node_path3.default.relative(import_node_path3.default.parse(base).root, full).split(import_node_path3.default.sep);
+  let at = import_node_path3.default.parse(base).root;
+  for (const piece of pieces) {
+    at = import_node_path3.default.join(at, piece);
+    try {
+      if (import_node_fs3.default.lstatSync(at).isSymbolicLink()) throw Error("Symlink paths are not supported");
+    } catch (e) {
+      if (e.code !== "ENOENT") throw e;
+    }
+  }
+  return full;
+}
+function loadConfig(root, file = "thinker.config.json") {
+  const input = import_node_fs3.default.readFileSync(safePath(root, file), "utf8");
+  if (Buffer.byteLength(input) > 65536) throw Error("Config exceeds 64 KiB");
+  const x = JSON.parse(input);
+  if (x.version !== 1 || !Array.isArray(x.checks) || x.checks.length < 1 || x.checks.length > 30) throw Error("Config needs version 1 and 1-30 checks");
+  const names = /* @__PURE__ */ new Set();
+  for (const c of x.checks) {
+    if (!c || typeof c.name !== "string" || !c.name.trim() || c.name.length > 100 || names.has(c.name)) throw Error("Each check needs a unique name (1-100 characters)");
+    names.add(c.name);
+    if (!Array.isArray(c.command) || !c.command.length || c.command.length > 100 || c.command.some((v) => typeof v !== "string" || v.includes("\0") || v.length > 4096) || !c.command[0]) throw Error("Commands must be nonempty string arrays");
+    if (c.cwd !== void 0 && typeof c.cwd !== "string") throw Error("cwd must be a relative path");
+    if (c.cwd && import_node_path3.default.isAbsolute(c.cwd)) throw Error("cwd must be relative");
+    const cwd = safePath(root, c.cwd || ".");
+    if (!import_node_fs3.default.statSync(cwd).isDirectory()) throw Error("Check cwd is not a directory");
+    if (c.timeoutMs !== void 0 && (!Number.isSafeInteger(c.timeoutMs) || c.timeoutMs < 10 || c.timeoutMs > 6e5)) throw Error("timeoutMs must be 10-600000");
+    if (c.required !== void 0 && typeof c.required !== "boolean") throw Error("required must be boolean");
+  }
+  return x;
+}
+function git(root, args) {
+  const x = (0, import_node_child_process.spawnSync)("git", args, { cwd: root, encoding: "utf8", timeout: 1e4, maxBuffer: 8 * 1024 * 1024 });
+  return x.status === 0 && !x.error ? x.stdout.trim() : null;
+}
+function fingerprint(root) {
+  const result = (0, import_node_child_process.spawnSync)("git", ["ls-files", "-co", "--exclude-standard", "-z"], { cwd: root, encoding: "utf8", timeout: 1e4, maxBuffer: 8 * 1024 * 1024 });
+  if (result.status !== 0 || result.error) throw Error("Receipts require a Git repository and working git command");
+  const names = [...new Set(result.stdout.split("\0").filter(Boolean))].filter((p) => !p.startsWith(".thinker/") && !p.startsWith("node_modules/")).sort();
+  if (names.length > 2e4) throw Error("Receipt file limit exceeded");
+  const hash = (0, import_node_crypto2.createHash)("sha256");
+  for (const name of names) {
+    const full = safePath(root, name);
+    hash.update(name + "\0");
+    if (!import_node_fs3.default.existsSync(full)) {
+      hash.update("missing\0");
+      continue;
+    }
+    const s = import_node_fs3.default.statSync(full);
+    if (!s.isFile() || s.size > 10 * 1024 * 1024) throw Error("Unsupported file or file over 10 MiB in receipt scope");
+    hash.update(String(s.mode) + "\0");
+    hash.update(import_node_fs3.default.readFileSync(full));
+    hash.update("\0");
+  }
+  return hash.digest("hex");
+}
+function redact(text) {
+  let out = text.replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, "");
+  for (const [name, value] of Object.entries(process.env)) if (/token|secret|password|api_?key|authorization|credential/i.test(name) && value && value.length >= 4) out = out.split(value).join("[REDACTED]");
+  return out.replace(/(?:npm_[A-Za-z0-9]{20,}|gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]+)/g, "[REDACTED]").replace(/((?:password|token|secret|api[_-]?key|authorization)\s*[:=]\s*)\S+/gi, "$1[REDACTED]");
+}
+async function executeCheck(root, c) {
+  const start = Date.now();
+  let output = "", truncated = false, timed = false;
+  return new Promise((resolve) => {
+    const command = [...c.command];
+    if (process.platform === "win32" && ["npm", "npx"].includes(command[0])) {
+      const npm = process.env.npm_execpath;
+      if (!npm) {
+        resolve({ name: c.name, command: c.command, cwd: c.cwd || ".", required: c.required !== false, status: "failed", exitCode: null, durationMs: 0, output: "On Windows invoke node with the npm/npx CLI file, or run from npm so npm_execpath is set.", truncated: false });
+        return;
+      }
+      command.splice(0, 1, process.execPath, command[0] === "npm" ? npm : import_node_path3.default.join(import_node_path3.default.dirname(npm), "npx-cli.js"));
+    }
+    const child = (0, import_node_child_process.spawn)(command[0], command.slice(1), { cwd: safePath(root, c.cwd || "."), shell: false, windowsHide: true, detached: process.platform !== "win32", stdio: ["ignore", "pipe", "pipe"] });
+    function collect(b) {
+      const text = b.toString("utf8");
+      const remaining = 131072 - output.length;
+      if (text.length > remaining) truncated = true;
+      if (remaining > 0) output += text.slice(0, remaining);
+    }
+    child.stdout.on("data", collect);
+    child.stderr.on("data", collect);
+    const stop = () => {
+      timed = true;
+      try {
+        if (process.platform === "win32") (0, import_node_child_process.spawnSync)("taskkill", ["/pid", String(child.pid), "/T", "/F"], { windowsHide: true, timeout: 5e3 });
+        else if (child.pid) process.kill(-child.pid, "SIGKILL");
+      } catch {
+        child.kill("SIGKILL");
+      }
+    };
+    const timer = setTimeout(stop, c.timeoutMs ?? 12e4);
+    let error = "";
+    child.on("error", (e) => {
+      error = e.message;
+    });
+    child.on("close", (code) => {
+      clearTimeout(timer);
+      resolve({ name: redact(c.name), command: c.command.map(redact), cwd: c.cwd || ".", required: c.required !== false, status: timed ? "timeout" : code === 0 && !error ? "passed" : "failed", exitCode: code, durationMs: Date.now() - start, output: redact(error + "\n" + output).trim(), truncated });
+    });
+  });
+}
+async function runConfigured(root, config) {
+  const startedAt = (/* @__PURE__ */ new Date()).toISOString(), before = fingerprint(root), head = git(root, ["rev-parse", "HEAD"]), base = git(root, ["rev-parse", "HEAD^"]);
+  const dirty = Boolean(git(root, ["status", "--porcelain"]));
+  const checks = [];
+  for (const c of config.checks) checks.push(await executeCheck(root, c));
+  const after = fingerprint(root), stale = before !== after || head !== git(root, ["rev-parse", "HEAD"]);
+  return { schemaVersion: 1, id: (0, import_node_crypto2.randomUUID)(), startedAt, finishedAt: (/* @__PURE__ */ new Date()).toISOString(), git: { head, base, dirty }, fingerprintBefore: before, fingerprintAfter: after, stale, passed: !stale && checks.every((c) => !c.required || c.status === "passed"), checks };
+}
+function receiptMarkdown(r) {
+  return `# Thinker review receipt
+
+Result: ${r.passed ? "PASS" : "FAIL"}${r.stale ? " (tree changed during checks)" : ""}
+
+Head: ${r.git.head ?? "unborn"}
+Parent: ${r.git.base ?? "none"}
+Dirty at start: ${r.git.dirty}
+Finished: ${r.finishedAt}
+
+${r.checks.map((c) => `- ${c.name.replace(/[\r\n]/g, " ")}: ${c.status} (${c.required ? "required" : "optional"}, exit ${c.exitCode ?? "none"}, ${c.durationMs} ms)`).join("\n")}
+
+Local evidence, not tamper-proof attestation. Applies only to the captured non-ignored Git working tree. Logs and commands may contain private information despite best-effort redaction. Nothing is uploaded.
+`;
+}
+function saveReceipt(root, r) {
+  const dir = safePath(root, ".thinker/receipts");
+  import_node_fs3.default.mkdirSync(dir, { recursive: true, mode: 448 });
+  const json = safePath(root, `.thinker/receipts/${r.id}.json`), markdown = safePath(root, `.thinker/receipts/${r.id}.md`);
+  import_node_fs3.default.writeFileSync(json, JSON.stringify(r, null, 2) + "\n", { flag: "wx", mode: 384 });
+  import_node_fs3.default.writeFileSync(markdown, receiptMarkdown(r), { flag: "wx", mode: 384 });
+  import_node_fs3.default.writeFileSync(safePath(root, ".thinker/receipts/latest.json"), JSON.stringify({ id: r.id }) + "\n", { mode: 384 });
+  return { json, markdown };
+}
+function checkLatest(root) {
+  const x = JSON.parse(import_node_fs3.default.readFileSync(safePath(root, ".thinker/receipts/latest.json"), "utf8"));
+  if (typeof x.id !== "string" || !/^[a-f0-9-]{36}$/.test(x.id)) throw Error("Invalid receipt pointer");
+  const r = JSON.parse(import_node_fs3.default.readFileSync(safePath(root, `.thinker/receipts/${x.id}.json`), "utf8"));
+  if (r.schemaVersion !== 1 || typeof r.fingerprintAfter !== "string" || !Array.isArray(r.checks)) throw Error("Unsupported receipt");
+  const stale = r.stale || r.fingerprintAfter !== fingerprint(root) || r.git.head !== git(root, ["rev-parse", "HEAD"]);
+  return { passed: r.passed === true && !stale, stale, id: x.id };
+}
+
+// src/commands/check.ts
+async function checkCommand(options = {}) {
+  const root = process.cwd(), config = loadConfig(root, options.config);
+  console.log("Project check plan (commands run repository code with your permissions):");
+  for (const c of config.checks) console.log(redact(`${c.name}: ${JSON.stringify(c.command)} [${c.cwd || "."}] ${c.required === false ? "optional" : "required"}`));
+  if (options.plan) return;
+  if (!options.trust) {
+    console.error("Not run. Review the config, then pass --trust to authorize these local commands.");
+    process.exitCode = 1;
+    return;
+  }
+  const r = await runConfigured(root, config), files = saveReceipt(root, r);
+  for (const c of r.checks) console.log(`${c.name}: ${c.status}${c.output ? "\n" + c.output : ""}`);
+  console.log(`Receipt: ${files.json}
+Summary: ${files.markdown}`);
+  console.log(r.passed ? "Required checks passed for this tree." : "Required checks failed or tree changed during execution.");
+  if (!r.passed) process.exitCode = 1;
+}
+function receiptCommand() {
+  const x = checkLatest(process.cwd());
+  console.log(`Receipt ${x.id}: ${x.stale ? "STALE" : x.passed ? "PASS" : "FAIL"}`);
+  if (!x.passed) process.exitCode = 1;
+}
+function doctorCommand(options = {}) {
+  const root = process.cwd();
+  let failed = false;
+  console.log(`Node: ${process.version}`);
+  const git2 = (0, import_node_child_process2.spawnSync)("git", ["rev-parse", "--show-toplevel"], { cwd: root, encoding: "utf8", timeout: 1e4 });
+  console.log(`Git: ${git2.status === 0 ? "available" : "unavailable or not a repository"}`);
+  if (git2.status !== 0) failed = true;
+  try {
+    const cfg = loadConfig(root, options.config);
+    console.log(`Config: valid (${cfg.checks.length} checks). No project commands executed.`);
+    for (const c of cfg.checks) {
+      const cmd = c.command[0], candidates = cmd.includes("/") || cmd.includes("\\") ? [import_node_path4.default.resolve(root, c.cwd || ".", cmd)] : (process.env.PATH || "").split(import_node_path4.default.delimiter).flatMap((d) => process.platform === "win32" ? (process.env.PATHEXT || ".EXE;.CMD;.BAT").split(";").map((e) => import_node_path4.default.join(d, cmd + e)) : [import_node_path4.default.join(d, cmd)]);
+      const found = candidates.some((p) => {
+        try {
+          return import_node_fs4.default.statSync(p).isFile();
+        } catch {
+          return false;
+        }
+      });
+      console.log(`${c.name}: executable ${found ? "found" : "not found on PATH"} (${redact(cmd)})`);
+      if (!found) failed = true;
+    }
+  } catch (e) {
+    console.error(`Config: ${e.message}`);
+    failed = true;
+  }
+  for (const name of ["AGENTS.md", ".github/copilot-instructions.md", "CLAUDE.md", ".cursorrules", ".windsurfrules", ".vscode/settings.json", ".gemini/rules/thinker.md"]) {
+    try {
+      const p = safePath(root, name);
+      if (import_node_fs4.default.existsSync(p)) console.log(`Target present: ${name} (file presence does not prove assistant compliance)`);
+    } catch (e) {
+      console.error(e.message);
+      failed = true;
+    }
+  }
+  if (failed) process.exitCode = 1;
+}
+
 // src/cli.ts
 var import_commander = require("commander");
 
@@ -341,6 +572,8 @@ async function initCommand(options = {}) {
       name: "ides",
       message: "Select IDE targets to configure with Thinker skills:",
       choices: [
+        { title: "Shared instructions (AGENTS.md)", value: "agents" },
+        { title: "GitHub Copilot (.github/copilot-instructions.md)", value: "copilot" },
         { title: "Cursor (.cursorrules)", value: "cursor", selected: true },
         { title: "Claude Code (CLAUDE.md)", value: "claude", selected: true },
         { title: "VS Code (.vscode/settings.json)", value: "vscode" },
@@ -382,7 +615,7 @@ Setup incomplete: ${failures} target(s) failed. Review the errors above.
 // src/commands/integrate.ts
 var import_picocolors3 = __toESM(require("picocolors"));
 async function integrateCommand(target, options = {}) {
-  const validTargets = ["cursor", "claude", "vscode", "windsurf", "antigravity"];
+  const validTargets = ["cursor", "claude", "vscode", "windsurf", "antigravity", "agents", "copilot"];
   const lower = target.toLowerCase();
   if (!validTargets.includes(lower)) {
     logger.error(`
@@ -418,7 +651,7 @@ function listCommand() {
 }
 
 // src/commands/verify.ts
-var import_node_child_process = require("child_process");
+var import_node_child_process3 = require("child_process");
 function verifyCommand(options = {}) {
   if (options.strict && options.lenient) throw new Error("Choose --strict or --lenient, not both.");
   const timeout = options.timeout ?? 12e4;
@@ -427,15 +660,15 @@ function verifyCommand(options = {}) {
   const results = [];
   for (const [name, command] of [["TypeScript", "npx --no-install tsc --noEmit"], ["Tests", "npm test -- --run"]]) {
     logger.info(`Running ${command}`);
-    const result = (0, import_node_child_process.spawnSync)(command, { shell: true, stdio: "inherit", timeout });
+    const result = (0, import_node_child_process3.spawnSync)(command, { shell: true, stdio: "inherit", timeout });
     const passed = result.status === 0 && !result.error;
     const detail2 = result.error?.message || (result.signal ? `Terminated: ${result.signal}` : void 0);
     results.push({ name, status: passed ? "passed" : "failed", exitCode: result.status, detail: detail2 });
     (passed ? logger.success : logger.error)(`${name}: ${passed ? "passed" : "failed"}${detail2 ? ` (${detail2})` : ""}`);
   }
-  const git = (0, import_node_child_process.spawnSync)("git", ["status", "--porcelain"], { encoding: "utf8", timeout });
-  const detail = git.status !== 0 || git.error ? "Git status unavailable; not a required check." : git.stdout.trim() ? "Working tree has uncommitted changes." : "Working tree is clean.";
-  results.push({ name: "Git status", status: "informational", exitCode: git.status, detail });
+  const git2 = (0, import_node_child_process3.spawnSync)("git", ["status", "--porcelain"], { encoding: "utf8", timeout });
+  const detail = git2.status !== 0 || git2.error ? "Git status unavailable; not a required check." : git2.stdout.trim() ? "Working tree has uncommitted changes." : "Working tree is clean.";
+  results.push({ name: "Git status", status: "informational", exitCode: git2.status, detail });
   logger.info(detail);
   const failed = results.some((r) => r.status === "failed");
   if (failed) {
@@ -449,11 +682,11 @@ Verification failed.${options.lenient ? " Lenient mode requested: exit code rema
 // src/cli.ts
 function createProgram() {
   const program = new import_commander.Command();
-  program.name("thinker").description("Protocol-driven engineering skills runtime for AI-assisted development").version("0.2.1");
+  program.name("thinker").description("Protocol-driven engineering skills runtime for AI-assisted development").version("0.3.0-dev.0");
   program.command("init").description("Initialize and configure Thinker skills in your workspace").option("-y, --yes", "Skip interactive prompts and use sensible defaults").action(async (options) => {
     await initCommand(options);
   });
-  program.command("integrate").description("Integrate Thinker protocols directly into an IDE target").requiredOption("-t, --target <ide>", "Target IDE: cursor, claude, vscode, windsurf, antigravity").option("-o, --overwrite", "Explicitly replace the whole target file (keeps a versioned backup)").action(async (options) => {
+  program.command("integrate").description("Integrate Thinker protocols directly into an IDE target").requiredOption("-t, --target <ide>", "Target IDE: cursor, claude, vscode, windsurf, antigravity, agents, copilot").option("-o, --overwrite", "Explicitly replace the whole target file (keeps a versioned backup)").action(async (options) => {
     await integrateCommand(options.target, options);
   });
   program.command("list").description("List all available invariant protocols and skills").action(() => {
@@ -462,20 +695,35 @@ function createProgram() {
   program.command("verify").description("Run invariant checks, type-checking, and regression barriers").option("--strict", "Fail when types or tests fail (the default)").option("--lenient", "Report failures but allow exit code zero").action((options) => {
     verifyCommand(options);
   });
+  program.command("check").description("Run reviewed project-configured checks and save local review receipts").option("--config <path>", "Project config file", "thinker.config.json").option("--plan", "Print the command plan without executing").option("--trust", "Authorize executing the reviewed project commands").action(checkCommand);
+  program.command("receipt").description("Check whether the latest local receipt passed and is still current").action(receiptCommand);
+  program.command("doctor").description("Inspect config and command availability without running project checks").option("--config <path>", "Project config file", "thinker.config.json").action(doctorCommand);
   return program;
 }
 function run() {
   const program = createProgram();
-  program.parse(process.argv);
+  return program.parseAsync(process.argv).catch((error) => {
+    console.error(error.message);
+    process.exitCode = 1;
+  });
 }
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
   CORE_SKILLS,
+  checkLatest,
   createProgram,
   detectWorkspace,
+  executeCheck,
+  fingerprint,
   getSkill,
   installTarget,
   listSkills,
-  run
+  loadConfig,
+  receiptMarkdown,
+  redact,
+  run,
+  runConfigured,
+  safePath,
+  saveReceipt
 });
 //# sourceMappingURL=index.js.map

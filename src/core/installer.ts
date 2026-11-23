@@ -58,6 +58,7 @@ export function installTarget(target: SupportedIDE, options: InstallOptions = {}
   const cwd = path.resolve(options.cwd || process.cwd());
   const skills = options.skills || CORE_SKILLS;
   const templates = {
+    agents: ["AGENTS.md", renderClaudeRules], copilot: [path.join(".github", "copilot-instructions.md"), renderClaudeRules],
     cursor: [".cursorrules", renderCursorRules], claude: ["CLAUDE.md", renderClaudeRules],
     windsurf: [".windsurfrules", renderWindsurfRules], vscode: [path.join(".vscode", "settings.json"), renderVSCodeSettings],
     antigravity: [path.join(".gemini", "rules", "thinker.md"), renderAntigravityRules],

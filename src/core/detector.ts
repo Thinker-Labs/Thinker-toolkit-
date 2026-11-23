@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-export type SupportedIDE = "cursor" | "claude" | "vscode" | "windsurf" | "antigravity";
+export type SupportedIDE = "cursor" | "claude" | "vscode" | "windsurf" | "antigravity" | "agents" | "copilot";
 export type SupportedFramework = "next" | "vite" | "node" | "python" | "unknown";
 export type PackageManager = "npm" | "pnpm" | "yarn" | "bun";
 
@@ -55,6 +55,8 @@ export function detectWorkspace(targetDir: string = process.cwd()): WorkspaceCon
 
   // 4. Check Installed / Active IDE configurations
   const detectedIDEs: SupportedIDE[] = [];
+  if (fs.existsSync(path.join(cwd, "AGENTS.md"))) detectedIDEs.push("agents");
+  if (fs.existsSync(path.join(cwd, ".github/copilot-instructions.md"))) detectedIDEs.push("copilot");
   if (fs.existsSync(path.join(cwd, ".cursor")) || fs.existsSync(path.join(cwd, ".cursorrules"))) {
     detectedIDEs.push("cursor");
   }
