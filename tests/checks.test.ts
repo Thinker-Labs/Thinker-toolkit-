@@ -16,3 +16,11 @@ describe('configured checks and receipts',()=>{
  it('rejects symlink paths',()=>{if(process.platform==='win32')return;const r=repo();fs.symlinkSync('/tmp',path.join(r,'link'));expect(()=>safePath(r,'link/file')).toThrow();});
  it('bounds check output',async()=>{const r=repo();const x=await executeCheck(r,{name:'large',command:command('process.stdout.write("x".repeat(300000))')});expect(x.output.length).toBeLessThanOrEqual(131072);expect(x.truncated).toBe(true);});
 });
+
+describe('receipt edge cases',()=>{
+ it('records ignored files outside receipt scope',async()=>{const r=repo();fs.writeFileSync(path.join(r,'.gitignore'),'ignored.txt\n');const cfg=config(r,[{name:'ok',command:command('')}]);saveReceipt(r,await runConfigured(r,cfg));fs.writeFileSync(path.join(r,'ignored.txt'),'ignored content');expect(checkLatest(r).stale).toBe(false);});
+ it('rejects pointer traversal and corrupt receipts',()=>{const r=repo();fs.mkdirSync(path.join(r,'.thinker/receipts'),{recursive:true});fs.writeFileSync(path.join(r,'.thinker/receipts/latest.json'),'{"id":"../../private"}');expect(()=>checkLatest(r)).toThrow();});
+ it('records a missing tracked file as a changed tree',async()=>{const r=repo();spawnSync('git',['add','a.txt'],{cwd:r});const cfg=config(r,[{name:'ok',command:command('')}]);saveReceipt(r,await runConfigured(r,cfg));fs.unlinkSync(path.join(r,'a.txt'));expect(checkLatest(r).stale).toBe(true);});
+ it('rejects timeout bounds and shell string commands',()=>{const r=repo();expect(()=>config(r,[{name:'x',command:'echo hi'}])).toThrow();expect(()=>config(r,[{name:'x',command:['node'],timeoutMs:0}])).toThrow();});
+ it('uses argv literally rather than interpreting shell metacharacters',async()=>{const r=repo();const x=await executeCheck(r,{name:'literal',command:[process.execPath,'-e','console.log(process.argv[1])','; echo should-not-execute']});expect(x.status).toBe('passed');expect(x.output).toBe('; echo should-not-execute');});
+});
