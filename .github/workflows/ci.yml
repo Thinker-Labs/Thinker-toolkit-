@@ -29,3 +29,22 @@ jobs:
             echo "Action ran without explicit trust"
             exit 1
           fi
+  action-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Create disposable Action fixture
+        run: |
+          mkdir -p "$RUNNER_TEMP/thinker-action-fixture"
+          cd "$RUNNER_TEMP/thinker-action-fixture"
+          git init
+          printf '%s' '{"version":1,"checks":[{"name":"node","command":["node","--version"]}]}' > thinker.config.json
+      - name: Run actual composite Action
+        uses: ./
+        env:
+          GITHUB_WORKSPACE: ${{ runner.temp }}/thinker-action-fixture
+        with:
+          trust-project-commands: 'true'
