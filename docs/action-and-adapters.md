@@ -1,6 +1,6 @@
 # Action and instruction adapters: development preview
 
-The composite Action is code in this repository, not a Marketplace listing or a published release. It uses the built CLI at the action checkout. It installs its own locked production dependencies with lifecycle scripts disabled. It does not upload artifacts, write PR comments, grant token permissions or install project dependencies. The calling workflow owns Node setup, dependencies and its security policy.
+The composite Action is code in this repository, not a Marketplace listing or a published release. It uses the built CLI at the action checkout. It installs its own locked production dependencies with lifecycle scripts disabled. It does not upload artifacts, write PR comments, grant token permissions or install project dependencies. The calling workflow owns Node setup, dependencies and its security policy. Optional working-directory selects the project directory; the default is the checked-out workspace.
 
 Use only a reviewed immutable commit SHA. Example workflow shape (replace REVIEWED_SHA with a real reviewed commit):
 

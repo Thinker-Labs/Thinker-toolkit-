@@ -5,6 +5,10 @@ inputs:
     description: Set to true only after reviewing this checkout and thinker.config.json. Commands execute repository code.
     required: true
     default: 'false'
+  working-directory:
+    description: Project directory containing thinker.config.json; defaults to the checked-out workspace.
+    required: false
+    default: '.'
 runs:
   using: composite
   steps:
@@ -14,5 +18,6 @@ runs:
     - name: Run reviewed checks
       shell: bash
       env:
+        THINKER_PROJECT_DIRECTORY: ${{ inputs.working-directory }}
         THINKER_TRUST_PROJECT_COMMANDS: ${{ inputs.trust-project-commands }}
       run: node "$GITHUB_ACTION_PATH/scripts/action.mjs"

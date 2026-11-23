@@ -44,7 +44,6 @@ jobs:
           printf '%s' '{"version":1,"checks":[{"name":"node","command":["node","--version"]}]}' > thinker.config.json
       - name: Run actual composite Action
         uses: ./
-        env:
-          GITHUB_WORKSPACE: ${{ runner.temp }}/thinker-action-fixture
         with:
           trust-project-commands: 'true'
+          working-directory: ${{ runner.temp }}/thinker-action-fixture
