@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.1
+
+- Document pinned npm installation and link to the published package.
+- Remove pre-publication GitHub-only installation wording.
+- Make the packed CLI version smoke test follow package metadata.
+- No setup or verification behavior changes.
+
 ## 0.2.0
 
 ### Changed

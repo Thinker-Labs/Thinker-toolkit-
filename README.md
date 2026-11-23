@@ -8,14 +8,14 @@ Requires Node.js 18+ for the CLI. Development/tests require Node.js 20+.
 
 ```sh
 # Run inside the project you want to configure
-npx github:Thinker-Toolkit/Thinker-toolkit- init
+npx thinker-toolkit@0.2.1 init
 
-# Or install the CLI globally from GitHub
-npm install -g github:Thinker-Toolkit/Thinker-toolkit-
+# Or install the CLI globally from npm
+npm install -g thinker-toolkit@0.2.1
 thinker init
 ```
 
-GitHub installs follow that branch's current source. Pin a reviewed commit when you need reproducible installation. This repository update is not an npm registry release.
+Published on npm as [thinker-toolkit](https://www.npmjs.com/package/thinker-toolkit). Commands above pin version 0.2.1 for reproducible setup. Omit the version only when you intend to use the latest release.
 
 Run setup in a trusted project. Installation and npm tools can access the network. Review the generated diff and backups before accepting changes.
 
