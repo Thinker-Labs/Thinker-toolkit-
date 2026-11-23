@@ -14,7 +14,9 @@
   "files": [
     "dist",
     "bin",
-    "README.md"
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
   ],
   "scripts": {
     "build": "tsup",
@@ -54,5 +56,13 @@
   "overrides": {
     "esbuild": "^0.28.1",
     "tinypool": "^2.1.2"
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Thinker-Toolkit/Thinker-toolkit-.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Thinker-Toolkit/Thinker-toolkit-/issues"
+  },
+  "homepage": "https://www.thinkerlab.tech/"
 }
