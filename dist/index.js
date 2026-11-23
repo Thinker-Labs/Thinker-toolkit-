@@ -449,7 +449,7 @@ Verification failed.${options.lenient ? " Lenient mode requested: exit code rema
 // src/cli.ts
 function createProgram() {
   const program = new import_commander.Command();
-  program.name("thinker").description("Protocol-driven engineering skills runtime for AI-assisted development").version("0.2.0");
+  program.name("thinker").description("Protocol-driven engineering skills runtime for AI-assisted development").version("0.2.1");
   program.command("init").description("Initialize and configure Thinker skills in your workspace").option("-y, --yes", "Skip interactive prompts and use sensible defaults").action(async (options) => {
     await initCommand(options);
   });

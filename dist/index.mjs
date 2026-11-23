@@ -6,7 +6,7 @@ import {
   installTarget,
   listSkills,
   run
-} from "./chunk-E7Q235UG.mjs";
+} from "./chunk-M5QD3BHA.mjs";
 export {
   CORE_SKILLS,
   createProgram,
