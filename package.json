@@ -62,10 +62,10 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Thinker-Toolkit/Thinker-toolkit-.git"
+    "url": "git+https://github.com/Thinker-Labs/Thinker-toolkit-.git"
   },
   "bugs": {
-    "url": "https://github.com/Thinker-Toolkit/Thinker-toolkit-/issues"
+    "url": "https://github.com/Thinker-Labs/Thinker-toolkit-/issues"
   },
   "homepage": "https://www.thinkerlab.tech/"
 }
